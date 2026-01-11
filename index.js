@@ -1,397 +1,300 @@
-const cheerio = require("cheerio");
 const express = require("express");
 const axios = require("axios");
-const PORT = process.env.PORT || 8080;
+const cheerio = require("cheerio");
 const cors = require("cors");
-const app = express();
 
+// ============ CONFIG ============
+const CONFIG = {
+  PORT: process.env.PORT || 8080,
+  BASE_URL: "https://komikdewasa.mom",
+  AUTHOR: "Fadila Fitra Kusuma Jaya",
+  USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+};
+
+// ============ HELPERS ============
+const fetchHTML = async (url) => {
+  const { data } = await axios.get(url, {
+    headers: { "User-Agent": CONFIG.USER_AGENT },
+  });
+  return cheerio.load(data);
+};
+
+const sendError = (res, message = "Terjadi kesalahan atau halaman tidak ditemukan") => {
+  res.status(500).json({ message, author: CONFIG.AUTHOR });
+};
+
+const cleanLink = (href, prefix) => {
+  return (href || "").replace(`${CONFIG.BASE_URL}/${prefix}/`, "").replace("/", "");
+};
+
+const getImage = ($el, selector) => {
+  const img = $el.find(selector);
+  return img.attr("src") || img.attr("data-src") || img.attr("data-lazy-src") || "";
+};
+
+// ============ PARSERS ============
+// Parser untuk Latest Update (.utao.styletwo)
+const parseMangaUpdate = ($) => {
+  const list = [];
+  $(".bixbox .listupd .utao.styletwo").each((_, el) => {
+    const item = $(el);
+    list.push({
+      judul: item.find(".uta .luf a.series h4").text().trim(),
+      img: getImage(item, ".uta .imgu a img"),
+      type: item.find(".uta .imgu a span.type").attr("class")?.replace("type ", "") || "Manga",
+      status: item.find(".uta .luf .statusind").text().trim(),
+      chapter: item.find(".uta .luf ul li:first-child a").text().trim(),
+      chapter_update: item.find(".uta .luf ul li:first-child span").text().trim(),
+      link: cleanLink(item.find(".uta .luf a.series").attr("href"), "komik"),
+    });
+  });
+  return list;
+};
+
+// Parser untuk Project Update (.bs.styletere)
+const parseMangaProject = ($) => {
+  const list = [];
+  $(".bixbox .listupd .bs.styletere").each((_, el) => {
+    const item = $(el);
+    const typeClass = item.find(".limit span.type").attr("class") || "";
+    const type = typeClass.replace("type ", "").trim() || "Manga";
+    
+    list.push({
+      judul: item.find(".bigor .tt").text().trim(),
+      img: getImage(item, ".limit img"),
+      type,
+      status: item.find(".limit span.status").text().trim() || "Ongoing",
+      chapter: item.find(".bigor .adds .epxs").text().trim(),
+      chapter_update: item.find(".bigor .adds .epxdate").text().trim(),
+      link: cleanLink(item.find(".bsx > a").attr("href"), ""),
+    });
+  });
+  return list;
+};
+
+// Parser untuk Popular Today (.popularslider .bs)
+const parsePopularToday = ($) => {
+  const list = [];
+  $(".popularslider .bs").each((_, el) => {
+    const item = $(el);
+    const typeClass = item.find(".limit span.type").attr("class") || "";
+    const type = typeClass.replace("type ", "").trim() || "Manga";
+    
+    list.push({
+      judul: item.find(".bigor .tt").text().trim(),
+      img: getImage(item, ".limit img"),
+      type,
+      status: item.find(".limit span.status").text().trim() || "Ongoing",
+      chapter: item.find(".bigor .adds .epxs").text().trim(),
+      rating: item.find(".bigor .adds .rt .numscore").text().trim(),
+      link: cleanLink(item.find(".bsx > a").attr("href"), "komik"),
+    });
+  });
+  return list;
+};
+
+// ============ APP SETUP ============
+const app = express();
 app.use(cors());
 
-app.get("/", (req, res) => {
-  res.send({ message: "Hallo" });
+// ============ ROUTES ============
+app.get("/", (_, res) => {
+  res.json({ message: "Hallo 👋", author: CONFIG.AUTHOR });
 });
 
-app.get("/manga/v2/manga-project", (req, res) => {
-  let url = "https://komikcast.lol";
-
-  axios.get(url).then((response) => {
-    const $ = cheerio.load(response.data);
-    const content = $(".postbody");
-    const obj = {};
-    let anime = [];
-
-    obj.author = "Fadila Fitra Kusuma Jaya";
-    obj.url = url;
-
-    content.find(".bixbox:nth-child(1) > .listupd > .utao").each((id, el) => {
-      let img = $(el).find(".uta > .imgu > a").find("img").attr("src");
-      let judul = $(el).find(".uta > .luf > a > h3").text().trim();
-      let chapter = $(el)
-        .find(".uta > .luf > ul > li:first-child > a")
-        .text()
-        .trim();
-      let link = $(el)
-        .find("a")
-        .attr("href")
-        .replace("https://komikcast.lol/komik/", "")
-        .replace("/", "");
-      let chapter_update = $(el)
-        .find(".uta > .luf > ul > li:first-child > span")
-        .text()
-        .trim();
-      anime.push({
-        judul,
-        img,
-        chapter_update,
-        chapter,
-        link,
-      });
-
-      obj.anime_list = anime;
-    });
-
-    res.json(obj);
-  });
-});
-
-app.get("/manga/v2/manga-update", (req, res) => {
-  let url = "https://komikcast.lol";
-
-  axios.get(url).then((response) => {
-    const $ = cheerio.load(response.data);
-    const content = $(".postbody");
-    const obj = {};
-    let anime = [];
-
-    obj.author = "Fadila Fitra Kusuma Jaya";
-    obj.url = url;
-
-    content.find(".bixbox:nth-child(2) > .listupd > .utao").each((id, el) => {
-      let img = $(el).find(".uta > .imgu > a").find("img").attr("src");
-      let judul = $(el).find(".uta > .luf > a > h3").text().trim();
-      let chapter = $(el)
-        .find(".uta > .luf > ul > li:first-child > a")
-        .text()
-        .trim();
-      let link = $(el)
-        .find("a")
-        .attr("href")
-        .replace("https://komikcast.lol/komik/", "")
-        .replace("/", "");
-      let chapter_update = $(el)
-        .find(".uta > .luf > ul > li:first-child > span")
-        .text()
-        .trim();
-      anime.push({
-        judul,
-        img,
-        chapter_update,
-        chapter,
-        link,
-      });
-
-      obj.anime_list = anime;
-    });
-
-    res.json(obj);
-  });
-});
-
-app.get("/manga/v2/page/:id/:keyword", (req, res) => {
-  const pageId = parseInt(req.params.id);
-  const keyword = req.params.keyword;
-  let url =
-    pageId == 1
-      ? "https://komikcast.lol/page/1/?s=" + keyword
-      : "https://komikcast.lol/page/" + pageId + "/?s=" + keyword;
-
+// Manga Update (Latest Update - .utao.styletwo)
+app.get("/manga/v2/manga-update", async (_, res) => {
   try {
-    axios
-      .get(url)
-      .then((response) => {
-        const $ = cheerio.load(response.data);
-        const content = $(".list-update");
-        const obj = {};
-        let anime = [];
-
-        obj.author = "Fadila Fitra Kusuma Jaya";
-        obj.url = url;
-        obj.currentPage = pageId;
-        obj.nextPage = pageId + 1;
-
-        content
-          .find(
-            ".list-update_items > .list-update_items-wrapper > .list-update_item"
-          )
-          .each((id, el) => {
-            let img = $(el)
-              .find("a > .list-update_item-image")
-              .find("img")
-              .attr("src");
-            let judul = $(el)
-              .find("a > .list-update_item-info > h3.title")
-              .text()
-              .trim();
-            let chapter = $(el)
-              .find("a > .list-update_item-info > .other > .chapter")
-              .text()
-              .trim();
-            let link = $(el)
-              .find("a")
-              .attr("href")
-              .replace("https://komikcast.lol/komik/", "")
-              .replace("/", "");
-            let type = $(el)
-              .find("a > .list-update_item-image")
-              .find("span.type")
-              .text();
-            anime.push({
-              judul,
-              img,
-              type,
-              chapter,
-              link,
-            });
-
-            obj.anime_list = anime;
-          });
-
-        res.json(obj);
-      })
-      .catch(function () {
-        res.json({
-          message: "Ada yang tidak beres atau halaman tidak ditemukan",
-        });
-      });
-  } catch {
+    const $ = await fetchHTML(CONFIG.BASE_URL);
     res.json({
-      message: "Ada yang tidak beres atau halaman tidak ditemukan",
+      author: CONFIG.AUTHOR,
+      url: CONFIG.BASE_URL,
+      manga_list: parseMangaUpdate($),
     });
+  } catch (err) {
+    console.error(err.message);
+    sendError(res);
   }
 });
 
-app.get("/manga/v2/page/:id", (req, res) => {
+// Manga Project (Project Update - .bs.styletere)
+app.get("/manga/v2/manga-project", async (_, res) => {
+  try {
+    const $ = await fetchHTML(CONFIG.BASE_URL);
+    res.json({
+      author: CONFIG.AUTHOR,
+      url: CONFIG.BASE_URL,
+      manga_list: parseMangaProject($),
+    });
+  } catch (err) {
+    console.error(err.message);
+    sendError(res);
+  }
+});
+
+// Popular Today (.popularslider)
+app.get("/manga/v2/popular-today", async (_, res) => {
+  try {
+    const $ = await fetchHTML(CONFIG.BASE_URL);
+    res.json({
+      author: CONFIG.AUTHOR,
+      url: CONFIG.BASE_URL,
+      manga_list: parsePopularToday($),
+    });
+  } catch (err) {
+    console.error(err.message);
+    sendError(res);
+  }
+});
+
+// Search
+app.get("/manga/v2/page/:id/:keyword", async (req, res) => {
+  const { id, keyword } = req.params;
+  const pageId = parseInt(id);
+  const url = `${CONFIG.BASE_URL}/page/${pageId}/?s=${keyword}`;
+
+  try {
+    const $ = await fetchHTML(url);
+    res.json({
+      author: CONFIG.AUTHOR,
+      url,
+      currentPage: pageId,
+      nextPage: pageId + 1,
+      manga_list: parseMangaUpdate($),
+    });
+  } catch (err) {
+    console.error(err.message);
+    sendError(res);
+  }
+});
+
+// Daftar Komik
+app.get("/manga/v2/page/:id", async (req, res) => {
   const pageId = parseInt(req.params.id);
-  let url =
-    pageId == 1
-      ? "https://komikcast.lol/daftar-komik/"
-      : "https://komikcast.lol/daftar-komik/page/" + pageId;
+  const url = pageId === 1
+    ? `${CONFIG.BASE_URL}/komik/`
+    : `${CONFIG.BASE_URL}/komik/page/${pageId}/`;
 
-  axios.get(url).then((response) => {
-    const $ = cheerio.load(response.data);
-    const content = $(".list-update");
-    const obj = {};
-    let anime = [];
-
-    obj.author = "Fadila Fitra Kusuma Jaya";
-    obj.url = url;
-    obj.currentPage = pageId;
-    obj.nextPage = pageId + 1;
-
-    content
-      .find(
-        ".list-update_items > .list-update_items-wrapper > .list-update_item"
-      )
-      .each((id, el) => {
-        let img = $(el)
-          .find("a > .list-update_item-image")
-          .find("img")
-          .attr("src");
-        let judul = $(el)
-          .find("a > .list-update_item-info > h3.title")
-          .text()
-          .trim();
-        let chapter = $(el)
-          .find("a > .list-update_item-info > .other > .chapter")
-          .text()
-          .trim();
-        let link = $(el)
-          .find("a")
-          .attr("href")
-          .replace("https://komikcast.lol/komik/", "")
-          .replace("/", "");
-        let type = $(el)
-          .find("a > .list-update_item-image")
-          .find("span.type")
-          .text();
-        anime.push({
-          judul,
-          img,
-          type,
-          chapter,
-          link,
-        });
-
-        obj.anime_list = anime;
-      });
-
-    res.json(obj);
-  });
+  try {
+    const $ = await fetchHTML(url);
+    res.json({
+      author: CONFIG.AUTHOR,
+      url,
+      currentPage: pageId,
+      nextPage: pageId + 1,
+      manga_list: parseMangaUpdate($),
+    });
+  } catch (err) {
+    console.error(err.message);
+    sendError(res);
+  }
 });
 
-app.get("/manga/v2/detail/:slug", (req, res) => {
-  const slug = req.params.slug;
-  axios
-    .get("https://komikcast.lol/komik/" + slug)
-    .then((response) => {
-      const $ = cheerio.load(response.data);
-      const content = $(".komik_info-body");
 
-      const obj = {};
-      let list_chapter = [];
-      let detail = [];
-      let genres = [];
+// Detail Komik
+app.get("/manga/v2/detail/:slug", async (req, res) => {
+  const { slug } = req.params;
+  const url = `${CONFIG.BASE_URL}/komik/${slug}`;
 
-      //   Ambil gambar cover komik
-      content
-        .find(".komik_info-content > .komik_info-content-thumbnail")
-        .each((id, el) => {
-          obj.img = $(el).find("img").attr("src");
-        });
+  try {
+    const $ = await fetchHTML(url);
+    
+    // Helper untuk ambil data dari table
+    const getTableData = (label) => {
+      const row = $(`.infotable tr:contains('${label}')`);
+      return row.find("td:last-child").text().trim();
+    };
 
-      // Ambil Info Komik
-      content
-        .find(".komik_info-content > .komik_info-content-body")
-        .each((id, el) => {
-          obj.title = $(el).find("h1.komik_info-content-body-title").text();
-          obj.status = $(el)
-            .find(".komik_info-content-meta > span:nth-child(3)")
-            .text()
-            .replace("Status:", "")
-            .trim();
-          obj.released = $(el)
-            .find(".komik_info-content-meta > span:nth-child(1)")
-            .text()
-            .replace("Released:", "")
-            .trim();
-          obj.author = $(el)
-            .find(".komik_info-content-meta > span:nth-child(2)")
-            .text()
-            .replace("Author:", "")
-            .trim();
-          obj.type = $(el)
-            .find(".komik_info-content-meta > span:nth-child(4)")
-            .text()
-            .replace("Type:", "")
-            .trim();
-        });
+    // Genres
+    const genres = [];
+    $(".seriestugenre a").each((_, el) => genres.push($(el).text().trim()));
 
-      // Ambil genre Komik
-      content
-        .find(
-          ".komik_info-content > .komik_info-content-body > .komik_info-content-genre > a"
-        )
-        .each((id, el) => {
-          const genre = $(el).text();
-          genres.push({
-            genre,
-          });
-          obj.genres = genres;
-        });
-
-      // Ambil sinopsi komik
-      content.find(".komik_info-description").each((id, el) => {
-        obj.sinopsis = $(el)
-          .find(".komik_info-description-sinopsis")
-          .text()
-          .trim();
-      });
-
-      //   Ambil semua chapter komik
-      content
-        .find(
-          ".komik_info-chapters > ul.komik_info-chapters-wrapper > li.komik_info-chapters-item"
-        )
-        .each((id, el) => {
-          let chapter_name = $(el).find("a.chapter-link-item").text().trim();
-          let chapter_up = $(el).find(".chapter-link-time").text().trim();
-          let chapter_link = $(el)
-            .find("a.chapter-link-item")
-            .attr("href")
-            .replace("https://komikcast.lol/chapter/", "")
-            .replace("/", "");
-
-          list_chapter.push({
-            chapter_name,
-            chapter_up,
-            chapter_link,
-          });
-
-          obj.chapter_list = list_chapter;
-        });
-      res.json(obj);
-    })
-    .catch((e) => {
-      res.send({
-        message: "Upss ada yang tidak beres",
-        author: "Fadila Fitra Kusuma Jaya",
+    // Chapters
+    const chapters = [];
+    $("#chapterlist ul li").each((_, el) => {
+      const item = $(el);
+      chapters.push({
+        chapter_name: item.find(".chapternum").text().trim(),
+        chapter_update: item.find(".chapterdate").text().trim(),
+        chapter_link: cleanLink(item.find("a").attr("href"), ""),
       });
     });
+
+    res.json({
+      title: $(".entry-title").text().trim(),
+      alternative: getTableData("Alternative"),
+      img: getImage($(".thumb"), "img"),
+      status: getTableData("Status"),
+      type: getTableData("Type"),
+      released: getTableData("Released"),
+      author: getTableData("Author"),
+      rating: $(".rating-prc .num").text().trim(),
+      views: $(".ts-views-count").text().trim(),
+      genres,
+      sinopsis: $(".entry-content-single p").text().trim(),
+      chapter_list: chapters,
+    });
+  } catch (err) {
+    console.error(err.message);
+    sendError(res);
+  }
 });
 
-app.get("/manga/v2/chapter/:slug", (req, res) => {
-  const slug = req.params.slug;
-  axios.get("https://komikcast.lol/chapter/" + slug).then((response) => {
-    const $ = cheerio.load(response.data);
-    const content = $(".chapter_");
+// Chapter Images
+app.get("/manga/v2/chapter/:slug", async (req, res) => {
+  const { slug } = req.params;
+  const url = `${CONFIG.BASE_URL}/${slug}`;
 
-    let chap = [];
-    const obj = {};
-
-    content.find(".chapter_headpost").each((id, el) => {
-      obj.judul = $(el).find("h1").text().trim();
-    });
-    content
-      .find(".chapter_body > .chapter_nav-control > .right-control > .nextprev")
-      .each((id, el) => {
-        if (
-          $(el).find("a:first-child").attr("rel") == "prev" &&
-          $(el).find("a:nth-child(2)").attr("rel") == "next"
-        ) {
-          obj.prevlink = $(el)
-            .find("a:first-child")
-            .attr("href")
-            .replace("https://komikcast.lol/chapter/", "");
-          obj.nextlink = $(el)
-            .find("a:nth-child(2)")
-            .attr("href")
-            .replace("https://komikcast.lol/chapter/", "");
-        } else if (
-          $(el).find("a:first-child").attr("rel") == "prev" &&
-          $(el).find("a:nth-child(2)") == ""
-        ) {
-          obj.prevlink = $(el)
-            .find("a")
-            .attr("href")
-            .replace("https://komikcast.lol/chapter/", "");
-          obj.nextlink = "";
-        } else if (
-          $(el).find("a:first-child").attr("rel") == "next" &&
-          $(el).find("a:nth-child(2)") == ""
-        ) {
-          obj.nextlink = $(el)
-            .find("a")
-            .attr("href")
-            .replace("https://komikcast.lol/chapter/", "");
-          obj.prevlink = "";
+  try {
+    const $ = await fetchHTML(url);
+    
+    // Extract data dari ts_reader.run({...})
+    let readerData = null;
+    $("script").each((_, el) => {
+      const scriptContent = $(el).html();
+      if (scriptContent && scriptContent.includes("ts_reader.run(")) {
+        const match = scriptContent.match(/ts_reader\.run\((\{.*?\})\);/s);
+        if (match && match[1]) {
+          try {
+            readerData = JSON.parse(match[1]);
+          } catch (e) {
+            console.error("Failed to parse ts_reader data:", e.message);
+          }
         }
-      });
-
-    content.find(".main-reading-area > img").each((id, el) => {
-      let chapter_image = $(el).attr("src");
-
-      chap.push({
-        chapter_image,
-        chapter_number: id,
-      });
-
-      obj.chapter = chap;
+      }
     });
 
-    res.json(obj);
-  });
+    if (!readerData) {
+      return sendError(res, "Data chapter tidak ditemukan");
+    }
+
+    // Extract images dari sources
+    const images = [];
+    if (readerData.sources && readerData.sources.length > 0) {
+      const source = readerData.sources[0];
+      source.images.forEach((imgUrl, idx) => {
+        images.push({
+          chapter_image: imgUrl,
+          chapter_number: idx,
+        });
+      });
+    }
+
+    res.json({
+      judul: slug.replace(/-/g, " ").replace(/chapter/i, "Chapter"),
+      total_pages: images.length,
+      prevlink: readerData.prevUrl ? cleanLink(readerData.prevUrl, "") : "",
+      nextlink: readerData.nextUrl ? cleanLink(readerData.nextUrl, "") : "",
+      chapter: images,
+    });
+  } catch (err) {
+    console.error(err.message);
+    sendError(res);
+  }
 });
 
-app.listen(PORT, function () {
-  console.log("Started application on port %d", PORT);
+// ============ START SERVER ============
+app.listen(CONFIG.PORT, () => {
+  console.log(`🚀 Server running on port ${CONFIG.PORT}`);
+  console.log(`📖 Base URL: ${CONFIG.BASE_URL}`);
 });
