@@ -118,6 +118,27 @@ const parsePopularToday = ($) => {
   return list;
 };
 
+// Parser untuk Genre List (.bixbox .listupd .bs)
+const parseGenreList = ($) => {
+  const list = [];
+  $(".bixbox .listupd .bs").each((_, el) => {
+    const item = $(el);
+    const typeClass = item.find(".limit span.type").attr("class") || "";
+    const type = typeClass.replace("type ", "").trim() || "Manga";
+    
+    list.push({
+      judul: item.find(".bigor .tt").text().trim(),
+      img: getImage(item, ".limit img"),
+      type,
+      status: item.find(".limit span.status").text().trim() || "Ongoing",
+      chapter: item.find(".bigor .adds .epxs").text().trim(),
+      rating: item.find(".bigor .adds .rt .numscore").text().trim(),
+      link: cleanLink(item.find(".bsx > a").attr("href"), "komik"),
+    });
+  });
+  return list;
+};
+
 // ============ APP SETUP ============
 const app = express();
 app.use(cors());
@@ -169,6 +190,78 @@ app.get("/manga/v2/popular-today", async (_, res) => {
   }
 });
 
+// List Genres
+app.get("/manga/v2/genres", async (_, res) => {
+  try {
+    const $ = await fetchHTML(CONFIG.BASE_URL);
+    const genres = [];
+    const seen = new Set(); // untuk filter duplikat
+    
+    $("ul.genre li a").each((_, el) => {
+      const name = $(el).text().trim();
+      const link = $(el).attr("href") || "";
+      const slug = link.replace(`${CONFIG.BASE_URL}/genres/`, "").replace("/", "");
+      
+      // Skip jika kosong atau sudah ada (duplikat)
+      if (name && !seen.has(slug)) {
+        seen.add(slug);
+        genres.push({ name, slug });
+      }
+    });
+
+    res.json({
+      author: CONFIG.AUTHOR,
+      total: genres.length,
+      genres,
+    });
+  } catch (err) {
+    sendError(res, "Gagal mengambil list genres", err);
+  }
+});
+
+// Manga by Genre
+app.get("/manga/v2/genres/:slug", async (req, res) => {
+  const { slug } = req.params;
+  const url = `${CONFIG.BASE_URL}/genres/${slug}/`;
+
+  try {
+    const $ = await fetchHTML(url);
+    const genreName = $(".bixbox .releases h1").text().trim();
+    
+    res.json({
+      author: CONFIG.AUTHOR,
+      genre: genreName || slug,
+      url,
+      manga_list: parseGenreList($),
+    });
+  } catch (err) {
+    sendError(res, "Gagal mengambil manga by genre", err);
+  }
+});
+
+// Manga by Genre with Pagination
+app.get("/manga/v2/genres/:slug/page/:page", async (req, res) => {
+  const { slug, page } = req.params;
+  const pageNum = parseInt(page);
+  const url = `${CONFIG.BASE_URL}/genres/${slug}/page/${pageNum}/`;
+
+  try {
+    const $ = await fetchHTML(url);
+    const genreName = $(".bixbox .releases h1").text().trim();
+    
+    res.json({
+      author: CONFIG.AUTHOR,
+      genre: genreName || slug,
+      url,
+      currentPage: pageNum,
+      nextPage: pageNum + 1,
+      manga_list: parseGenreList($),
+    });
+  } catch (err) {
+    sendError(res, "Gagal mengambil manga by genre", err);
+  }
+});
+
 // Search
 app.get("/manga/v2/page/:id/:keyword", async (req, res) => {
   const { id, keyword } = req.params;
@@ -179,10 +272,11 @@ app.get("/manga/v2/page/:id/:keyword", async (req, res) => {
     const $ = await fetchHTML(url);
     res.json({
       author: CONFIG.AUTHOR,
+      keyword,
       url,
       currentPage: pageId,
       nextPage: pageId + 1,
-      manga_list: parseMangaUpdate($),
+      manga_list: parseGenreList($),
     });
   } catch (err) {
     sendError(res, "Gagal mencari manga", err);
@@ -233,10 +327,14 @@ app.get("/manga/v2/detail/:slug", async (req, res) => {
     const chapters = [];
     $("#chapterlist ul li").each((_, el) => {
       const item = $(el);
+      const href = item.find("a").attr("href") || "";
+      // Hapus domain, sisakan slug saja
+      const chapterSlug = href.replace(CONFIG.BASE_URL + "/", "").replace(/\/$/, "");
+      
       chapters.push({
         chapter_name: item.find(".chapternum").text().trim(),
         chapter_update: item.find(".chapterdate").text().trim(),
-        chapter_link: cleanLink(item.find("a").attr("href"), ""),
+        chapter_link: chapterSlug,
       });
     });
 
