@@ -83,6 +83,9 @@ const parseMangaProject = ($) => {
     const item = $(el);
     const typeClass = item.find(".limit span.type").attr("class") || "";
     const type = typeClass.replace("type ", "").trim() || "Manga";
+    const href = item.find(".bsx > a").attr("href") || "";
+    // Hapus domain, sisakan slug saja
+    const slug = href.replace(CONFIG.BASE_URL + "/", "").replace(/\/$/, "");
     
     list.push({
       judul: item.find(".bigor .tt").text().trim(),
@@ -91,7 +94,7 @@ const parseMangaProject = ($) => {
       status: item.find(".limit span.status").text().trim() || "Ongoing",
       chapter: item.find(".bigor .adds .epxs").text().trim(),
       chapter_update: item.find(".bigor .adds .epxdate").text().trim(),
-      link: cleanLink(item.find(".bsx > a").attr("href"), ""),
+      link: slug,
     });
   });
   return list;
