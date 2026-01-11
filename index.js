@@ -289,9 +289,7 @@ app.get("/manga/v2/page/:id/:keyword", async (req, res) => {
 // Daftar Komik
 app.get("/manga/v2/page/:id", async (req, res) => {
   const pageId = parseInt(req.params.id);
-  const url = pageId === 1
-    ? `${CONFIG.BASE_URL}/komik/`
-    : `${CONFIG.BASE_URL}/komik/page/${pageId}/`;
+  const url = `${CONFIG.BASE_URL}/komik/?order=update&page=${pageId}`;
 
   try {
     const $ = await fetchHTML(url);
@@ -300,7 +298,7 @@ app.get("/manga/v2/page/:id", async (req, res) => {
       url,
       currentPage: pageId,
       nextPage: pageId + 1,
-      manga_list: parseMangaUpdate($),
+      manga_list: parseGenreList($),
     });
   } catch (err) {
     sendError(res, "Gagal mengambil daftar komik", err);
