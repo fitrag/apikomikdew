@@ -400,11 +400,15 @@ app.get("/manga/v2/chapter/:slug", async (req, res) => {
       });
     }
 
+    // Hapus domain dari prevUrl dan nextUrl
+    const prevSlug = readerData.prevUrl ? readerData.prevUrl.replace(CONFIG.BASE_URL + "/", "").replace(/\/$/, "") : "";
+    const nextSlug = readerData.nextUrl ? readerData.nextUrl.replace(CONFIG.BASE_URL + "/", "").replace(/\/$/, "") : "";
+
     res.json({
       judul: slug.replace(/-/g, " ").replace(/chapter/i, "Chapter"),
       total_pages: images.length,
-      prevlink: readerData.prevUrl ? cleanLink(readerData.prevUrl, "") : "",
-      nextlink: readerData.nextUrl ? cleanLink(readerData.nextUrl, "") : "",
+      prevlink: prevSlug,
+      nextlink: nextSlug,
       chapter: images,
     });
   } catch (err) {
