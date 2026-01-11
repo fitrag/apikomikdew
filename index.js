@@ -14,12 +14,21 @@ const CONFIG = {
 // ============ HELPERS ============
 const fetchHTML = async (url) => {
   const { data } = await axios.get(url, {
-    headers: { "User-Agent": CONFIG.USER_AGENT },
+    headers: {
+      "User-Agent": CONFIG.USER_AGENT,
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5",
+      "Accept-Encoding": "gzip, deflate",
+      "Connection": "keep-alive",
+      "Upgrade-Insecure-Requests": "1",
+    },
+    timeout: 30000,
   });
   return cheerio.load(data);
 };
 
-const sendError = (res, message = "Terjadi kesalahan atau halaman tidak ditemukan") => {
+const sendError = (res, message = "Terjadi kesalahan atau halaman tidak ditemukan", error = null) => {
+  console.error("Error:", message, error?.message || "");
   res.status(500).json({ message, author: CONFIG.AUTHOR });
 };
 
@@ -112,8 +121,7 @@ app.get("/manga/v2/manga-update", async (_, res) => {
       manga_list: parseMangaUpdate($),
     });
   } catch (err) {
-    console.error(err.message);
-    sendError(res);
+    sendError(res, "Gagal mengambil data manga update", err);
   }
 });
 
@@ -127,8 +135,7 @@ app.get("/manga/v2/manga-project", async (_, res) => {
       manga_list: parseMangaProject($),
     });
   } catch (err) {
-    console.error(err.message);
-    sendError(res);
+    sendError(res, "Gagal mengambil data manga project", err);
   }
 });
 
@@ -142,8 +149,7 @@ app.get("/manga/v2/popular-today", async (_, res) => {
       manga_list: parsePopularToday($),
     });
   } catch (err) {
-    console.error(err.message);
-    sendError(res);
+    sendError(res, "Gagal mengambil data popular today", err);
   }
 });
 
@@ -163,8 +169,7 @@ app.get("/manga/v2/page/:id/:keyword", async (req, res) => {
       manga_list: parseMangaUpdate($),
     });
   } catch (err) {
-    console.error(err.message);
-    sendError(res);
+    sendError(res, "Gagal mencari manga", err);
   }
 });
 
@@ -185,8 +190,7 @@ app.get("/manga/v2/page/:id", async (req, res) => {
       manga_list: parseMangaUpdate($),
     });
   } catch (err) {
-    console.error(err.message);
-    sendError(res);
+    sendError(res, "Gagal mengambil daftar komik", err);
   }
 });
 
@@ -235,8 +239,7 @@ app.get("/manga/v2/detail/:slug", async (req, res) => {
       chapter_list: chapters,
     });
   } catch (err) {
-    console.error(err.message);
-    sendError(res);
+    sendError(res, "Gagal mengambil detail komik", err);
   }
 });
 
@@ -288,8 +291,7 @@ app.get("/manga/v2/chapter/:slug", async (req, res) => {
       chapter: images,
     });
   } catch (err) {
-    console.error(err.message);
-    sendError(res);
+    sendError(res, "Gagal mengambil chapter", err);
   }
 });
 
