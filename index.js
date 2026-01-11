@@ -8,32 +8,39 @@ const CONFIG = {
   PORT: process.env.PORT || 8080,
   BASE_URL: "https://komikdewasa.mom",
   AUTHOR: "Fadila Fitra Kusuma Jaya",
-  USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 };
 
+// List proxy gratis (bisa ditambah/diganti)
+const PROXIES = [
+  null, // tanpa proxy (coba dulu)
+  "https://api.allorigins.win/raw?url=",
+  "https://corsproxy.io/?",
+  "https://api.codetabs.com/v1/proxy?quest=",
+];
+
 // ============ HELPERS ============
-const fetchHTML = async (url) => {
-  const { data } = await axios.get(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-      "Accept-Language": "en-US,en;q=0.9,id;q=0.8",
-      "Accept-Encoding": "gzip, deflate, br",
-      "Cache-Control": "max-age=0",
-      "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
-      "Sec-Ch-Ua-Mobile": "?0",
-      "Sec-Ch-Ua-Platform": '"Windows"',
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "none",
-      "Sec-Fetch-User": "?1",
-      "Upgrade-Insecure-Requests": "1",
-      "Referer": "https://www.google.com/",
-    },
-    timeout: 30000,
-    maxRedirects: 5,
-  });
-  return cheerio.load(data);
+const fetchHTML = async (url, proxyIndex = 0) => {
+  const proxy = PROXIES[proxyIndex];
+  const targetUrl = proxy ? `${proxy}${encodeURIComponent(url)}` : url;
+  
+  try {
+    const { data } = await axios.get(targetUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9,id;q=0.8",
+      },
+      timeout: 30000,
+    });
+    return cheerio.load(data);
+  } catch (err) {
+    // Coba proxy berikutnya jika gagal
+    if (proxyIndex < PROXIES.length - 1) {
+      console.log(`Proxy ${proxyIndex} gagal, mencoba proxy ${proxyIndex + 1}...`);
+      return fetchHTML(url, proxyIndex + 1);
+    }
+    throw err;
+  }
 };
 
 const sendError = (res, message = "Terjadi kesalahan atau halaman tidak ditemukan", error = null) => {
